@@ -3,7 +3,8 @@
 #include "user.h"
 #include "fs.h"
 
-char* fmtname(char *path)
+char*
+fmtname(char *path)
 {
   static char buf[DIRSIZ+1];
   char *p;
@@ -20,117 +21,69 @@ char* fmtname(char *path)
   memset(buf+strlen(p), ' ', DIRSIZ-strlen(p));
   return buf;
 }
-int match(char *string, char *pattern) {
-    //printf(1,"\nstr %s pat %s\n",string,pattern);
-    if (pattern[0] == '\0' && string[0] == '\0') 
-        {return 1;}
 
-    if (pattern[0] == '*' && pattern[1] != '\0' && string[0] == '\0')
-        return match(string, pattern+1);
-
-    if (pattern[0] == '?' || pattern[0] == string[0])
-        return match(string+1, pattern+1);
-
-    if (pattern[0] == '*')
-        return match(string, pattern+1) || match(string+1, pattern);
-    return 0;
+char *formatName(char *name) {
+	int len = strlen(name);
+	static char finalName[DIRSIZ+1];
+	int i, lc = 0;
+	for(i = 0; i < len; i++) {
+		if(name[i] == '/') {
+			lc = 0;
+			memset(finalName, 0, DIRSIZ+1);
+		}
+		else {
+			finalName[lc] = name[i];
+			lc = lc + 1;
+		}
+	}
+	return(finalName);
 }
 
+char *folderName(char *name) {
+	int len = strlen(name);
+	int secondLayer = 0;
+	static char finalName[DIRSIZ+1];
+	int i, lc = 0;
+	for(i = 0; i < len; i++) {
+		if(name[i] == '/' && secondLayer != 0) {
+			break;
+		}
+		if(name[i] == '/' && secondLayer == 0) {
+			secondLayer = 1;
+		}
+		finalName[lc] = name[i];
+		lc = lc + 1;
+	}
+	return(finalName);
+}
 
+int wildcardStr(char *string, char *pattern) {
+    if (pattern[0] == '\0' && string[0] == '\0') 
+        return 1;
 
+    if (pattern[0] == '*' && pattern[1] != '\0' && string[0] == '\0')
+        return wildcardStr(string, pattern+1);
+
+    if (pattern[0] == '?' && string[0] == '\0')
+        return 0;
+
+    if (pattern[0] == '?' || pattern[0] == string[0])
+        return wildcardStr(string+1, pattern+1);
+
+    if (pattern[0] == '*')
+        return wildcardStr(string, pattern+1) || wildcardStr(string+1, pattern);
+    return 0;
+}
 
 void
 ls(char *path)
 {
-  //printf(1,"Inside ls");
   char buf[512], *p;
-  int fd,index;
+  int fd;
   struct dirent de;
   struct stat st;
-//######################################################################################################
-//in case input has * 
-  int flag=0;
-  for(index=strlen(path)-1; index>=0; index--)
-        {
-         if(path[index]=='*'||path[index]=='?') {flag=1;break;}
-        }
- 
-  if(*path=='*') {path[0]='.';path[1]='\0';flag=0;}
-  if(flag)
- {
-        //printf(1,"Inside if");
-        int k=0;
-  	
-        char name[512];
-        strcpy(name,fmtname(path));
-        //printf(1,"\nbefore loop\n");
-        int check=0;
-	for(index=strlen(path)-1; index>=0 ; index--)
-        {
-         if(path[index]=='/') {check=1;break;}
-         k++;
-         //printf(1," %d ",k);
-        }
-        if(check==0) 
-          {
-           path[0]='.';
-           path[1]='\0';
-           } 
-       // printf(1,"\nbefore null\n");
-        else
-        *(path+(strlen(path)-k-1))='\0';
-        //printf(1,"\nafter loop\n");
- 	// printf(1,"\n path %s\n",(path));
-   	if((fd = open(path, 0)) < 0){
-    	    printf(2, "ls: cannot open %s\n", path);
-    	    return;}
-  	if(fstat(fd, &st) < 0){
-    	    printf(2, "ls: cannot stat %s\n", path);
-    	    close(fd);
-    	    return;}
+  
 
-    	if(strlen(path) + 1 + DIRSIZ + 1 > sizeof buf){
-      	    printf(1, "ls: path too long\n");
-            return;}
-    
-    strcpy(buf, path);
-    p = buf+strlen(buf);
-    
-    *p++ = '/';
-    while(read(fd, &de, sizeof(de)) == sizeof(de)){
-      if(de.inum == 0)
-        continue;
-      memmove(p, de.name, DIRSIZ);
-      p[DIRSIZ] = 0;
-      //printf(1,"\n%s  %s\n",name,de.name);
-      //printf(1," %d ",strlen(de.name));
-      int i;
-      for(i=0;i<strlen(name);i++) 
-      { 
-	if(name[i]==' ') {name[i]='\0';break;}
-	//printf(1,"%c",name[i]);
-      }
-
-      if(match(de.name,name)) printf(1,"\n%s\n",de.name);
-      if(stat(buf, &st) < 0){
-        printf(1, "ls: cannot stat %s\n", buf);
-        continue;
-      }
-      //printf(1, "%s %d %d %d\n", fmtname(buf), st.type, st.ino, st.size);
-     
-     
-  }
-
-  close(fd);
-  return;
- }
-
-//######################################################################################################
-//no wildcard
-else
-  {
-  //printf(1,"\npath %s\n\n",path);
-  //printf(1,"Inside else");
   if((fd = open(path, 0)) < 0){
     printf(2, "ls: cannot open %s\n", path);
     return;
@@ -142,19 +95,85 @@ else
     return;
   }
 
-  
   switch(st.type){
+  // This case displays the ls when the argument is a file name
   case T_FILE:
     printf(1, "%s %d %d %d\n", fmtname(path), st.type, st.ino, st.size);
     break;
 
+  // This case displays the ls when the argument is a folder name
   case T_DIR:
+    printf(1, "FOLDER NAME\n");
     if(strlen(path) + 1 + DIRSIZ + 1 > sizeof buf){
       printf(1, "ls: path too long\n");
       break;
     }
     strcpy(buf, path);
+    //printf(1, "Buf: %s\n", buf);
     p = buf+strlen(buf);
+    
+    *p++ = '/';
+    printf(1, "P: %s\n");
+    while(read(fd, &de, sizeof(de)) == sizeof(de)){
+      if(de.inum == 0)
+        continue;
+      memmove(p, de.name, DIRSIZ);
+      p[DIRSIZ] = 0;
+      printf(1, "FILE NAME: %s\n",buf);
+      if(stat(buf, &st) < 0){
+        printf(1, "ls: cannot stat %s\n", buf);
+        continue;
+      }
+      //printf(1, "P : %s\n", p);
+      //printf(1, "Buf: %s Length: %d\n",buf, strlen(buf));
+      printf(1, "%s %d %d %d\n", fmtname(buf), st.type, st.ino, st.size);
+    }
+    break;
+  }
+  close(fd);
+}
+
+void
+lsWildCard(char *specifiedPath) {
+  char buf[512], *p;
+  int fd;
+  struct dirent de;
+  struct stat st;
+
+  char* path = folderName(specifiedPath);
+  
+  char* whatIEntered = specifiedPath;
+
+  if((fd = open(path, 0)) < 0){
+    printf(2, "ls: cannot open %s\n", path);
+    return;
+  }
+
+  if(fstat(fd, &st) < 0){
+    printf(2, "ls: cannot stat %s\n", path);
+    close(fd);
+    return;
+  }
+
+  switch(st.type){
+  // This case displays the ls when the argument is a file name
+  case T_FILE:
+    //printf(1, "Buf: %s\t wie: %s\n",buf, whatIEntered);
+    if(wildcardStr(formatName(buf), whatIEntered))
+      printf(1, "%s %d %d %d\n", fmtname(path), st.type, st.ino, st.size);
+    break;
+
+  // This case displays the ls when the argument is a folder name
+  case T_DIR:
+    //printf(1, "FOLDER NAME 2\n");
+    if(strlen(path) + 1 + DIRSIZ + 1 > sizeof buf){
+      printf(1, "ls: path too long\n");
+      break;
+    }
+    strcpy(buf, path);
+    //cd xvprintf(1, "Buf: %s\n", buf);
+    p = buf+strlen(buf);
+    
     *p++ = '/';
     while(read(fd, &de, sizeof(de)) == sizeof(de)){
       if(de.inum == 0)
@@ -165,15 +184,14 @@ else
         printf(1, "ls: cannot stat %s\n", buf);
         continue;
       }
-      printf(1, "%s %d %d %d\n", fmtname(buf), st.type, st.ino, st.size);
+      //printf(1, "Buf: %s\t wie: %s\n",buf, whatIEntered);
+      if(wildcardStr(formatName(buf), whatIEntered))
+	ls(formatName(buf));       
+	//printf(1, "%s %d %d %d\n", fmtname(buf), st.type, st.ino, st.size);
     }
     break;
   }
   close(fd);
-  return;
-  }
-//######################################################################################################
- 
 }
 
 int
@@ -185,7 +203,16 @@ main(int argc, char *argv[])
     ls(".");
     exit();
   }
-  for(i=1; i<argc; i++)
-    ls(argv[i]);
+  for(i=1; i<argc; i++) {
+    // Used strchr which is a function defined in ulib.c
+    // strchr returns the position at which the character (*)
+    // is present in the string (argv[i]) else returns 0
+    if(strchr(argv[i], '*') || strchr(argv[i], '?')) {
+      lsWildCard(argv[i]);
+    }
+    else {
+      ls(argv[i]);
+    }
+  }
   exit();
 }
